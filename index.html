@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#2f3a48">
+<title>제자리 (시험용 프로토타입)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+  :root {
+    --calm: 0;
+    --ink: #2f3a48;
+    --soft: #6b7684;
+    --accent: #4a90a4;
+    --bg: #e9ecef;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); }
+  body {
+    font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    color: var(--ink);
+    user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  #app {
+    position: fixed; inset: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    display: flex; flex-direction: column;
+  }
+  .screen { display: none; flex: 1; flex-direction: column; min-height: 0; }
+  .screen.on { display: flex; }
+
+  /* ---------- 메뉴 화면 ---------- */
+  .menu { background: #f4f1ea; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; }
+  .menu h1 { font-size: 40px; margin: 0; letter-spacing: 2px; }
+  .menu .sub { color: var(--soft); font-size: 14px; margin: 0 0 18px; }
+  .btn {
+    font: inherit; font-size: 18px; font-weight: 600; border: 0; border-radius: 16px;
+    padding: 16px 20px; width: min(320px, 86vw); background: var(--ink); color: #fff;
+  }
+  .btn.ghost { background: #fff; color: var(--ink); border: 1.5px solid #cfd6dd; }
+  .btn.small { font-size: 15px; padding: 12px 16px; width: auto; }
+  .note { font-size: 12px; color: var(--soft); margin-top: 18px; line-height: 1.5; }
+
+  /* ---------- 자가 평가 ---------- */
+  .rate { background: #f4f1ea; padding: 24px 18px; justify-content: center; align-items: center; text-align: center; gap: 14px; }
+  .rate h2 { font-size: 20px; margin: 0; }
+  .rate p { margin: 0; color: var(--soft); font-size: 14px; }
+  .scale { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; width: min(360px, 92vw); }
+  .scale button { font: inherit; font-size: 18px; padding: 12px 0; border-radius: 12px; border: 1.5px solid #cfd6dd; background: #fff; color: var(--ink); }
+  .scale .ends { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: 12px; color: var(--soft); }
+  .choice { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .choice button { font: inherit; font-size: 15px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid #cfd6dd; background: #fff; color: var(--ink); }
+  .skip { background: none; border: 0; color: var(--soft); font: inherit; font-size: 14px; text-decoration: underline; padding: 8px; }
+
+  /* ---------- 게임 ---------- */
+  .game { background: #2f3a48; }
+  #topbar { padding: 10px 16px 8px; color: #e9ecef; }
+  #status { font-size: 14px; height: 20px; margin-bottom: 8px; opacity: .92; transition: opacity .6s; }
+  #route { position: relative; height: 14px; }
+  #route .line { position: absolute; left: 8px; right: 8px; top: 6px; height: 2px; background: #6b7684; border-radius: 2px; }
+  #route .stn { position: absolute; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: #e9ecef; }
+  #route .stn.a { left: 4px; } #route .stn.b { right: 4px; }
+  #train { position: absolute; top: 0; left: 4px; width: 26px; height: 14px; border-radius: 7px; background: #9fd3c7; transform: translateX(0); }
+  #stage { position: relative; flex: 1; min-height: 0; margin: 4px 10px 10px; touch-action: none; }
+  #car {
+    position: absolute; left: 0; right: 0; top: 0; height: 78%;
+    border-radius: 22px;
+    background: #d9dde3;
+    background: color-mix(in srgb, #c9cfd6 calc((1 - var(--calm)) * 100%), #f6f1e7);
+    transition: background 1.2s ease, transform 4s ease-in, opacity 4s ease-in;
+    overflow: visible;
+  }
+  .seat { position: absolute; top: 6%; bottom: 14%; width: 9%; background: rgba(47,58,72,.12); border-radius: 10px; }
+  .seat.l { left: 3%; } .seat.r { right: 3%; }
+  #aisle {
+    position: absolute; left: 33%; right: 33%; top: 5%; bottom: 10%; border-radius: 14px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0));
+  }
+  .seg { position: absolute; left: 0; right: 0; border-radius: 10px; background: rgba(255,255,255,0); transition: background .5s ease; }
+  .seg.open { background: rgba(255,255,255,.35); }
+  #doorL, #doorR { position: absolute; bottom: -3px; height: 6px; width: 16%; background: #2f3a48; border-radius: 3px; transition: transform 1.2s ease; }
+  #doorL { left: 34%; } #doorR { right: 34%; }
+  #car.dooropen #doorL { transform: translateX(-90%); }
+  #car.dooropen #doorR { transform: translateX(90%); }
+  #platform { position: absolute; left: 0; right: 0; bottom: 0; height: 19%; border-radius: 16px; background: #46546a; }
+  #platform::after { content: ""; position: absolute; left: 6%; right: 6%; top: 10%; height: 3px; background: #e8c547; opacity: .7; border-radius: 2px; }
+
+  .p {
+    position: absolute; width: 11%; aspect-ratio: 1; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: left .25s ease, top .25s ease, background .5s ease, opacity .6s ease;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.12);
+  }
+  .p.slow { transition: left .9s ease-in-out, top .9s ease-in-out, background .6s ease, opacity .8s ease; }
+  .p .bag {
+    position: absolute; width: 58%; height: 46%; left: 21%; top: -32%;
+    background: #8b6f5c; border-radius: 6px; transition: top .25s ease, opacity .25s ease;
+  }
+  .p.fixed .bag { top: 78%; opacity: .9; }
+  .p.blocker { animation: wob 1.6s ease-in-out infinite; }
+  .p.fixed { animation: none; }
+  @keyframes wob { 0%,100% { transform: translate(-50%,-50%) scale(1); } 50% { transform: translate(-50%,-50%) scale(1.06); } }
+  .p.hint { outline: 3px solid rgba(255,214,102,.9); outline-offset: 3px; }
+  .bubble {
+    position: absolute; transform: translate(-50%, -140%); font-size: 13px; font-weight: 700;
+    background: #fff; padding: 2px 7px; border-radius: 10px; pointer-events: none;
+    animation: pop .7s ease forwards;
+  }
+  @keyframes pop { 0% { opacity: 0; transform: translate(-50%,-90%); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%,-190%); } }
+  .arrow {
+    position: absolute; font-size: 28px; color: rgba(255,255,255,.9); pointer-events: none;
+    transform: translate(-50%,-50%); animation: hintpulse 1.4s ease-in-out infinite; text-shadow: 0 1px 4px rgba(0,0,0,.4);
+  }
+  @keyframes hintpulse { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
+
+  #msg {
+    position: absolute; left: 50%; top: 36%; transform: translate(-50%,-50%);
+    font-size: 20px; font-weight: 700; color: var(--ink); text-align: center;
+    background: rgba(255,255,255,.88); padding: 10px 18px; border-radius: 16px; white-space: nowrap; z-index: 5;
+    opacity: 0; transition: opacity 2s ease; pointer-events: none;
+  }
+  #breath {
+    position: absolute; left: 50%; top: 36%; width: 40%; aspect-ratio: 1; border-radius: 50%;
+    transform: translate(-50%,-50%) scale(.6); background: rgba(255,255,255,.5); opacity: 0; pointer-events: none;
+  }
+  #breath.on { animation: breathe 10s ease-in-out infinite; }
+  @keyframes breathe { 0%,100% { transform: translate(-50%,-50%) scale(.6); opacity: .15; } 50% { transform: translate(-50%,-50%) scale(1.05); opacity: .55; } }
+
+  /* ---------- 결과 ---------- */
+  .result { background: #f4f1ea; padding: 22px 18px; align-items: center; justify-content: center; text-align: center; gap: 12px; overflow-y: auto; touch-action: pan-y; }
+  .result h2 { font-size: 22px; margin: 0; }
+  .result .sub { color: var(--soft); font-size: 14px; margin: 0 0 6px; }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .row .btn { width: 150px; }
+  .q { width: min(360px, 94vw); background: #fff; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .q h3 { font-size: 15px; margin: 0; }
+  .sel { background: var(--ink) !important; color: #fff !important; border-color: var(--ink) !important; }
+
+  /* ---------- 설정·기록 ---------- */
+  .panel { background: #f4f1ea; padding: 20px; gap: 14px; overflow-y: auto; touch-action: pan-y; }
+  .panel h2 { margin: 0; font-size: 22px; }
+  .item { background: #fff; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .item label { display: flex; justify-content: space-between; font-size: 15px; font-weight: 600; }
+  .item small { color: var(--soft); font-size: 12px; line-height: 1.4; }
+  input[type=range] { width: 100%; }
+  .toggle { font: inherit; font-size: 15px; padding: 10px; border-radius: 10px; border: 1.5px solid #cfd6dd; background: #fff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 12px; overflow: hidden; }
+  th, td { padding: 6px 4px; border-bottom: 1px solid #eef0f2; text-align: center; }
+  th { background: #e9ecef; }
+  #iosHaptic { position: fixed; left: -9999px; top: 0; opacity: 0; }
+</style>
+</head>
+<body>
+<label id="iosHaptic"><input type="checkbox" switch id="iosSwitch"></label>
+<div id="app">
+
+  <!-- 시작 화면 -->
+  <section class="screen menu on" id="sMenu">
+    <h1>제자리</h1>
+    <p class="sub">시험용 프로토타입 · 도형 버전</p>
+    <button class="btn" id="bStart">시작</button>
+    <button class="btn ghost" id="bSettings">설정 · 숫자 조정</button>
+    <button class="btn ghost" id="bLog">기록 보기</button>
+    <p class="note">막힌 곳을 <b>톡</b>, 무리를 <b>쓱</b> 정리하세요.<br>열차가 떠나기 전에 모두가 제자리를 찾으면 성공이에요.<br>한 판은 약 1분이에요.</p>
+  </section>
+
+  <!-- 플레이 전 자가 평가 -->
+  <section class="screen rate" id="sBefore">
+    <h2>지금 답답한 정도는?</h2>
+    <p>시험 기록용이에요. 출시 버전에는 없어요.</p>
+    <div class="scale" id="scaleBefore"></div>
+    <button class="skip" id="skipBefore">건너뛰기</button>
+  </section>
+
+  <!-- 게임 -->
+  <section class="screen game" id="sGame">
+    <div id="topbar">
+      <div id="status">열차가 역에 들어오고 있어요</div>
+      <div id="route"><div class="line"></div><div class="stn a"></div><div class="stn b"></div><div id="train"></div></div>
+    </div>
+    <div id="stage">
+      <div id="car">
+        <div class="seat l"></div><div class="seat r"></div>
+        <div id="aisle"></div>
+        <div id="doorL"></div><div id="doorR"></div>
+        <div id="breath"></div>
+        <div id="msg"></div>
+      </div>
+      <div id="platform"></div>
+    </div>
+  </section>
+
+  <!-- 결과 -->
+  <section class="screen result" id="sResult">
+    <h2 id="rTitle"></h2>
+    <p class="sub" id="rSub"></p>
+    <div class="q">
+      <h3>지금 답답한 정도는? (0~10)</h3>
+      <div class="scale" id="scaleAfter"></div>
+    </div>
+    <div class="q">
+      <h3>한 판을 하고 나서</h3>
+      <div class="choice" id="feel">
+        <button data-v="차분해졌다">차분해졌다</button>
+        <button data-v="그대로">그대로</button>
+        <button data-v="더 흥분됐다">더 흥분됐다</button>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" id="bAgain">다시 하기</button>
+      <button class="btn ghost" id="bStop">그만하기</button>
+    </div>
+  </section>
+
+  <!-- 설정 -->
+  <section class="screen panel" id="sSettings">
+    <h2>설정 · 숫자 조정</h2>
+    <div class="item">
+      <label>진동 <span id="vibState"></span></label>
+      <button class="toggle" id="bVib">진동 켜기/끄기</button>
+      <small>아이폰 브라우저는 표준 진동을 지원하지 않아, 스위치를 누를 때 나는 기본 진동을 빌려 씁니다. 진동이 약하거나 안 느껴질 수 있어요. 아이폰 설정 &gt; 사운드 및 햅틱 &gt; 시스템 햅틱이 켜져 있어야 해요.</small>
+      <button class="toggle" id="bVibTest">진동 시험해 보기</button>
+    </div>
+    <div class="item">
+      <label>톡 대상 수 <span id="vTok"></span></label>
+      <input type="range" id="rTok" min="3" max="8" step="1">
+      <small>한 판에 나오는 "가방을 뒤로 멘 승객 / 길을 막고 선 승객" 수. 시작값 5.</small>
+    </div>
+    <div class="item">
+      <label>톡톡 구간 길이 <span id="vTokSec"></span></label>
+      <input type="range" id="rTokSec" min="15" max="40" step="1">
+      <small>시작값 25초. 다 풀면 그 전에 문이 열려요.</small>
+    </div>
+    <div class="item">
+      <label>문 열림 구간 길이 <span id="vDoorSec"></span></label>
+      <input type="range" id="rDoorSec" min="10" max="30" step="1">
+      <small>시작값 20초. 이 구간이 끝날 때 성공/실패를 판정해요.</small>
+    </div>
+    <button class="btn ghost" id="bReset">시작값으로 되돌리기</button>
+    <button class="btn" id="bBack1">돌아가기</button>
+  </section>
+
+  <!-- 기록 -->
+  <section class="screen panel" id="sLog">
+    <h2>기록</h2>
+    <div class="item" id="logSummary"></div>
+    <div style="overflow-x:auto"><table id="logTable"></table></div>
+    <button class="btn ghost" id="bCopy">기록 복사하기 (Claude에게 붙여넣기용)</button>
+    <button class="btn ghost" id="bClear">기록 지우기</button>
+    <button class="btn" id="bBack2">돌아가기</button>
+  </section>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- 저장 (안 되면 메모리로) ----------
+  const mem = {};
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return k in mem ? mem[k] : d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { mem[k] = v; } }
+  };
+  const DEFAULTS = { tok: 5, tokSec: 25, doorSec: 20, vib: true };
+  let cfg = Object.assign({}, DEFAULTS, store.get("cfg", {}));
+  const saveCfg = () => store.set("cfg", cfg);
+
+  // ---------- 화면 전환 ----------
+  const $ = (id) => document.getElementById(id);
+  function show(id) {
+    document.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.id === id));
+  }
+
+  // ---------- 진동 ----------
+  // 아이폰·아이패드는 웹 표준 진동이 없어서 스위치 우회 방법을 씀
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const canVibrate = !isIOS && typeof navigator.vibrate === "function";
+  const iosLabel = $("iosHaptic");
+  function haptic(kind) {
+    if (!cfg.vib) return;
+    if (canVibrate) { navigator.vibrate(kind === "soft" ? 22 : kind === "done" ? [12, 60, 12] : 10); return; }
+    try { iosLabel.click(); } catch (e) {}
+  }
+
+  // ---------- 상태 ----------
+  const car = $("car"), stage = $("stage"), aisle = $("aisle");
+  const COLORS = ["#f2a7a0", "#a7c7e7", "#f6d186", "#b5d8b0", "#d4b5e2", "#f7c5a8", "#9fd3c7"];
+  let G = null;           // 현재 한 판
+  let session = { before: null, retry: false };
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  function makeP(x, y, opts = {}) {
+    const el = document.createElement("div");
+    el.className = "p" + (opts.cls ? " " + opts.cls : "");
+    el.style.left = x + "%"; el.style.top = y + "%";
+    el.style.background = opts.color || pick(COLORS);
+    (opts.parent || car).appendChild(el);
+    return el;
+  }
+  function moveP(el, x, y) { el.style.left = x + "%"; el.style.top = y + "%"; }
+  function bubble(el, text) {
+    const b = document.createElement("div");
+    b.className = "bubble"; b.textContent = text;
+    b.style.left = el.style.left; b.style.top = el.style.top;
+    el.parentNode.appendChild(b);
+    setTimeout(() => b.remove(), 800);
+  }
+  function setStatus(t) { $("status").textContent = t; }
+
+  // ---------- 한 판 만들기 ----------
+  function buildRound() {
+    car.querySelectorAll(".p, .bubble, .arrow").forEach(n => n.remove());
+    $("platform").querySelectorAll(".p").forEach(n => n.remove());
+    aisle.innerHTML = "";
+    car.classList.remove("dooropen");
+    car.style.transition = "none";
+    car.style.transform = ""; car.style.opacity = "";
+    void car.offsetWidth;            // 이전 판의 출발 연출을 즉시 되돌림
+    car.style.transition = "";
+    $("msg").style.opacity = 0; $("breath").classList.remove("on");
+
+    // 앉은 승객 (장식)
+    for (let i = 0; i < 5; i++) {
+      makeP(7.5, 12 + i * 13, {});
+      makeP(92.5, 12 + i * 13, {});
+    }
+    // 톡 대상: 통로 위에 일정 간격
+    const n = cfg.tok;
+    const blockers = [];
+    const top = 12, bottom = 64;
+    for (let i = 0; i < n; i++) {
+      const y = n === 1 ? (top + bottom) / 2 : top + (bottom - top) * i / (n - 1);
+      const seg = document.createElement("div");
+      seg.className = "seg";
+      // 칸 좌표(y%) → 통로 좌표 (통로는 칸의 top 5% ~ bottom 10%, 높이 85%)
+      seg.style.top = Math.max(0, (y - 10) / 85 * 100) + "%";
+      seg.style.height = (10 / 85 * 100) + "%";
+      aisle.appendChild(seg);
+      const type = Math.random() < 0.55 ? "bag" : "stand";
+      const x = type === "bag" ? rnd(44, 56) : 50;
+      const el = makeP(x, y, { cls: "blocker" });
+      if (type === "bag") { const b = document.createElement("div"); b.className = "bag"; el.appendChild(b); }
+      blockers.push({ el, type, seg, done: false, x, y });
+    }
+    // 문 앞 무리 (차 안)
+    const crowd = [];
+    [[44, 86], [50, 89], [56, 86]].forEach(([x, y]) => crowd.push(makeP(x + rnd(-1.5, 1.5), y, { cls: "slow" })));
+    // 승강장 무리
+    const plat = [];
+    [[42, 45], [50, 60], [58, 45], [47, 75]].forEach(([x, y]) => plat.push(makeP(x + rnd(-2, 2), y, { parent: $("platform"), cls: "slow" })));
+    plat.forEach(p => p.style.width = "11%");
+    // 승강장 안 사람 크기를 차 안과 맞추기 (승강장 높이가 작아 % 기준이 다름)
+    return { blockers, crowd, plat };
+  }
+
+  // ---------- 진행 ----------
+  function startRound() {
+    const ents = buildRound();
+    G = Object.assign(ents, {
+      t0: performance.now(), phase: "start", parted: false, lined: false,
+      wrongTaps: 0, firstTap: null, ended: false, arrows: [],
+      startSec: 5, tokSec: cfg.tokSec, doorSec: cfg.doorSec, endSec: 10
+    });
+    G.total = G.startSec + G.tokSec + G.doorSec + G.endSec;
+    car.style.setProperty("--calm", 0);
+    $("train").style.transition = "none";
+    setStatus("열차가 역에 들어오고 있어요 · 막힌 곳을 톡!");
+    show("sGame");
+    requestAnimationFrame(tick);
+  }
+
+  function cleared() { return G.blockers.filter(b => b.done).length; }
+  function calmLevel() {
+    const total = G.blockers.length + 2;
+    return (cleared() + (G.parted ? 1 : 0) + (G.lined ? 1 : 0)) / total;
+  }
+  function updateCalm() { car.style.setProperty("--calm", (calmLevel() * 0.85).toFixed(3)); }
+
+  function elapsed() { return (performance.now() - G.t0) / 1000; }
+
+  function tick() {
+    if (!G || G.ended) return;
+    const t = elapsed();
+    const doorStart = G.doorStartAt ?? (G.startSec + G.tokSec);
+    // 열차 위치: 판 전체 진행에 맞춰 천천히
+    const prog = Math.min(1, t / (doorStart + G.doorSec));
+    const routeW = $("route").clientWidth - 34;
+    $("train").style.transform = `translateX(${prog * routeW}px)`;
+
+    if (G.phase === "start" && t >= G.startSec) { G.phase = "tok"; setStatus("정차 중 · 막힌 곳을 톡톡 풀어요"); }
+    if ((G.phase === "start" || G.phase === "tok") &&
+        (t >= G.startSec + G.tokSec || (cleared() === G.blockers.length && t >= 2))) {
+      openDoor(t);
+    }
+    if (G.phase === "door") {
+      const left = G.doorStartAt + G.doorSec - t;
+      if (left <= 5 && !G.warned) { G.warned = true; setStatus("곧 문이 닫힙니다"); }
+      if (left <= 0) judge();
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function openDoor(t) {
+    G.phase = "door"; G.doorStartAt = t;
+    car.classList.add("dooropen");
+    setStatus("문이 열렸어요 · 문 앞 사람들을 양옆으로 쓱");
+    showArrows("side");
+  }
+
+  function showArrows(kind) {
+    G.arrows.forEach(a => a.remove()); G.arrows = [];
+    const add = (x, y, s, parent) => { const a = document.createElement("div"); a.className = "arrow"; a.textContent = s; a.style.left = x + "%"; a.style.top = y + "%"; (parent || car).appendChild(a); G.arrows.push(a); };
+    if (kind === "side") { add(32, 87, "←"); add(68, 87, "→"); }
+    if (kind === "down") { add(70, 50, "↓", $("platform")); }
+  }
+
+  // ---------- 입력 ----------
+  let down = null;
+  stage.addEventListener("pointerdown", (e) => {
+    if (!G || G.ended) return;
+    down = { x: e.clientX, y: e.clientY, t: performance.now() };
+  });
+  stage.addEventListener("pointerup", (e) => {
+    if (!G || G.ended || !down) return;
+    const dx = e.clientX - down.x, dy = e.clientY - down.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 18) onTap(e.clientX, e.clientY);
+    else onSwipe(dx, dy);
+    down = null;
+  });
+  stage.addEventListener("pointercancel", () => { down = null; });
+
+  function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width }; }
+
+  function onTap(x, y) {
+    if (G.firstTap === null) G.firstTap = +elapsed().toFixed(1);
+    let best = null, bd = Infinity;
+    G.blockers.forEach(b => {
+      if (b.done) return;
+      const c = centerOf(b.el);
+      const d = Math.hypot(c.x - x, c.y - y);
+      const R = Math.max(48, c.w * 1.4);   // 넉넉한 판정
+      if (d < R && d < bd) { bd = d; best = b; }
+    });
+    if (!best) { G.wrongTaps++; return; } // 벌 없음
+    best.done = true;
+    best.el.classList.remove("blocker"); best.el.classList.add("fixed");
+    if (best.type === "stand") moveP(best.el, best.x < 50 ? 37 : 63, best.y);
+    else moveP(best.el, best.x < 50 ? 38 : 62, best.y);
+    best.seg.classList.add("open");
+    bubble(best.el, "아!");
+    haptic("tap");
+    updateCalm();
+    if (G.phase === "door" && G.parted && G.lined && cleared() === G.blockers.length) {
+      const g = G; setTimeout(() => { if (G === g && !g.ended) judge(); }, 900);
+    }
+  }
+
+  function onSwipe(dx, dy) {
+    if (G.phase !== "door") return;
+    const horiz = Math.abs(dx) > Math.abs(dy) * 1.2 && Math.abs(dx) > 30;
+    const downward = dy > 30 && Math.abs(dy) > Math.abs(dx) * 1.2;
+    if (horiz && !G.parted) {
+      G.parted = true;
+      const pos = [[30, 84], [70, 84], [24, 76]];
+      G.crowd.forEach((p, i) => setTimeout(() => moveP(p, pos[i][0], pos[i][1]), i * 120));
+      haptic("soft");
+      // 내리는 사람: 통로에서 문으로 나가기
+      const out = [makeP(50, 30, { cls: "slow" }), makeP(50, 20, { cls: "slow" })];
+      out.forEach((p, i) => setTimeout(() => { moveP(p, 50, 104); setTimeout(() => { p.style.opacity = 0; }, 900); setTimeout(() => p.remove(), 1800); }, 300 + i * 450));
+      setStatus("길이 났어요 · 타는 사람들을 아래로 쓱 줄 세워요");
+      showArrows("down");
+      updateCalm();
+    } else if (downward && G.parted && !G.lined) {
+      G.lined = true;
+      G.plat.forEach((p, i) => setTimeout(() => moveP(p, 26 + i * 16, 55), i * 140));
+      haptic("soft");
+      G.arrows.forEach(a => a.remove()); G.arrows = [];
+      setStatus("한 줄로 섰어요");
+      updateCalm();
+      if (cleared() === G.blockers.length) { const g = G; setTimeout(() => { if (G === g && !g.ended) judge(); }, 900); }
+    }
+  }
+
+  // ---------- 판정과 마무리 ----------
+  function judge() {
+    if (G.ended) return;
+    G.ended = true;
+    G.arrows.forEach(a => a.remove());
+    const ok = cleared() === G.blockers.length && G.parted && G.lined;
+    G.result = ok ? "성공" : "실패";
+    G.judgedAt = +elapsed().toFixed(1);
+    if (ok) successEnding(); else failEnding();
+  }
+
+  function successEnding() {
+    const g = G;
+    const alive = () => G === g;
+    haptic("done");
+    setStatus("문이 닫히고 열차가 출발해요");
+    const tr = $("train"); tr.style.transition = "transform 7s ease-in-out";
+    tr.style.transform = `translateX(${$("route").clientWidth - 34}px)`;
+    // 탑승: 줄 선 사람들이 차례로 차 안으로
+    g.plat.forEach((p, i) => setTimeout(() => {
+      if (!alive()) return;
+      p.style.opacity = 0;
+      const inCar = makeP(50, 86, { cls: "slow", color: p.style.background });
+      setTimeout(() => moveP(inCar, [24, 76, 34, 66][i % 4], 78 - (i >> 1) * 7), 60);
+    }, 400 + i * 500));
+    setTimeout(() => { if (alive()) { car.classList.remove("dooropen"); car.style.setProperty("--calm", 1); } }, 2600);
+    const msg = $("msg"); msg.textContent = "모두 제자리를 찾았어요";
+    setTimeout(() => { if (alive()) { msg.style.opacity = 1; $("breath").classList.add("on"); } }, 1500);
+    setTimeout(() => { if (alive()) { car.style.transform = "translateY(-6%)"; car.style.opacity = 0; } }, 6000);
+    setTimeout(() => { if (alive()) toResult(true); }, 10000);   // 마무리 약 10초
+  }
+
+  function failEnding() {
+    setStatus("열차가 떠날 시간이에요");
+    car.classList.remove("dooropen");
+    G.blockers.forEach(b => { if (!b.done) b.el.classList.add("hint"); });
+    const g = G; setTimeout(() => { if (G === g) toResult(false); }, 2500);
+  }
+
+  // ---------- 결과·기록 ----------
+  let after = null, feel = null;
+  function toResult(ok) {
+    $("rTitle").textContent = ok ? "모두 제자리를 찾았어요" : "아쉽다, 다음 열차에서 다시!";
+    const left = G.blockers.length - cleared() + (G.parted ? 0 : 1) + (G.lined ? 0 : 1);
+    $("rSub").textContent = ok ? "열차가 조용히 출발했어요." : `정리 못 한 곳이 ${left}곳 남았어요.`;
+    after = null; feel = null;
+    document.querySelectorAll("#scaleAfter button, #feel button").forEach(b => b.classList.remove("sel"));
+    show("sResult");
+  }
+
+  function saveLog(action) {
+    const log = store.get("log", []);
+    log.push({
+      at: new Date().toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
+      result: G.result, before: session.before, after, feel,
+      wrong: G.wrongTaps, judgedAt: G.judgedAt, retry: session.retry,
+      tok: cfg.tok, tokSec: cfg.tokSec, doorSec: cfg.doorSec, next: action
+    });
+    store.set("log", log);
+  }
+
+  function buildScale(el, onPick) {
+    for (let i = 0; i <= 10; i++) {
+      const b = document.createElement("button"); b.textContent = i;
+      b.addEventListener("click", () => { el.querySelectorAll("button").forEach(x => x.classList.remove("sel")); b.classList.add("sel"); onPick(i); });
+      el.appendChild(b);
+    }
+    const ends = document.createElement("div"); ends.className = "ends";
+    ends.innerHTML = "<span>0 전혀 안 답답</span><span>10 매우 답답</span>";
+    el.appendChild(ends);
+  }
+  buildScale($("scaleBefore"), (v) => { session.before = v; setTimeout(startRound, 250); });
+  buildScale($("scaleAfter"), (v) => { after = v; });
+  document.querySelectorAll("#feel button").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll("#feel button").forEach(x => x.classList.remove("sel")); b.classList.add("sel"); feel = b.dataset.v;
+  }));
+
+  $("bStart").addEventListener("click", () => { session = { before: null, retry: false }; show("sBefore"); });
+  $("skipBefore").addEventListener("click", () => startRound());
+  $("bAgain").addEventListener("click", () => {
+    saveLog("다시 하기");
+    session = { before: after, retry: G.result === "실패" };
+    startRound();
+  });
+  $("bStop").addEventListener("click", () => { saveLog("그만하기"); G = null; show("sMenu"); });
+
+  // ---------- 설정 ----------
+  function syncSettings() {
+    $("rTok").value = cfg.tok; $("vTok").textContent = cfg.tok + "명";
+    $("rTokSec").value = cfg.tokSec; $("vTokSec").textContent = cfg.tokSec + "초";
+    $("rDoorSec").value = cfg.doorSec; $("vDoorSec").textContent = cfg.doorSec + "초";
+    $("vibState").textContent = cfg.vib ? "켜짐" : "꺼짐";
+  }
+  [["rTok", "tok"], ["rTokSec", "tokSec"], ["rDoorSec", "doorSec"]].forEach(([id, k]) =>
+    $(id).addEventListener("input", (e) => { cfg[k] = +e.target.value; saveCfg(); syncSettings(); }));
+  $("bVib").addEventListener("click", () => { cfg.vib = !cfg.vib; saveCfg(); syncSettings(); });
+  $("bVibTest").addEventListener("click", () => haptic("tap"));
+  $("bReset").addEventListener("click", () => { cfg = Object.assign({}, DEFAULTS); saveCfg(); syncSettings(); });
+  $("bSettings").addEventListener("click", () => { syncSettings(); show("sSettings"); });
+  $("bBack1").addEventListener("click", () => show("sMenu"));
+
+  // ---------- 기록 화면 ----------
+  function renderLog() {
+    const log = store.get("log", []);
+    const n = log.length;
+    const ok = log.filter(r => r.result === "성공").length;
+    const fails = log.filter(r => r.result === "실패");
+    const retried = fails.filter(r => r.next === "다시 하기").length;
+    const pairs = log.filter(r => r.before !== null && r.after !== null);
+    const avgDiff = pairs.length ? (pairs.reduce((s, r) => s + (r.after - r.before), 0) / pairs.length).toFixed(1) : "-";
+    $("logSummary").innerHTML =
+      `<b>모두 ${n}판</b> · 성공 ${ok}판 · 실패 ${fails.length}판<br>` +
+      `실패 후 다시 하기: ${fails.length ? retried + "/" + fails.length : "-"}<br>` +
+      `답답한 정도 변화 평균 (후 − 전): ${avgDiff} <small>(음수면 줄어든 것)</small>`;
+    const head = "<tr><th>시각</th><th>결과</th><th>전</th><th>후</th><th>느낌</th><th>헛누름</th><th>다음</th></tr>";
+    $("logTable").innerHTML = head + log.slice().reverse().map(r =>
+      `<tr><td>${r.at}</td><td>${r.result}</td><td>${r.before ?? "-"}</td><td>${r.after ?? "-"}</td><td>${r.feel ?? "-"}</td><td>${r.wrong}</td><td>${r.next}</td></tr>`).join("");
+  }
+  $("bLog").addEventListener("click", () => { renderLog(); show("sLog"); });
+  $("bBack2").addEventListener("click", () => show("sMenu"));
+  $("bClear").addEventListener("click", () => { store.set("log", []); renderLog(); });
+  $("bCopy").addEventListener("click", async () => {
+    const text = JSON.stringify(store.get("log", []), null, 1);
+    try { await navigator.clipboard.writeText(text); $("bCopy").textContent = "복사했어요"; }
+    catch (e) { $("bCopy").textContent = "복사가 안 돼요. 화면을 캡처해 주세요"; }
+    setTimeout(() => $("bCopy").textContent = "기록 복사하기 (Claude에게 붙여넣기용)", 2000);
+  });
+
+  // 화면을 벗어나면 그 판은 기록하지 않고 멈춤 (잃는 것 없음)
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && G && !G.ended) { G.ended = true; G = null; show("sMenu"); }
+  });
+})();
+</script>
+</body>
+</html>
