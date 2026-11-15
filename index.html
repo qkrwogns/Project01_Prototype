@@ -161,15 +161,7 @@
     <button class="btn" id="bStart">시작</button>
     <button class="btn ghost" id="bSettings">설정 · 숫자 조정</button>
     <button class="btn ghost" id="bLog">기록 보기</button>
-    <p class="note">막힌 곳을 <b>톡</b>, 무리를 <b>쓱</b> 정리하세요.<br>열차가 떠나기 전에 모두가 제자리를 찾으면 성공이에요.<br>한 판은 약 1분이에요.</p>
-  </section>
-
-  <!-- 플레이 전 자가 평가 -->
-  <section class="screen rate" id="sBefore">
-    <h2>지금 답답한 정도는?</h2>
-    <p>시험 기록용이에요. 출시 버전에는 없어요.</p>
-    <div class="scale" id="scaleBefore"></div>
-    <button class="skip" id="skipBefore">건너뛰기</button>
+    <p class="note">막힌 곳은 <b>톡</b>, 무리는 <b>쓱</b>. 순서는 자유예요.<br>문이 닫히기 전에 모두가 제자리를 찾으면 성공이에요.<br>한 판은 약 1분이에요.</p>
   </section>
 
   <!-- 게임 -->
@@ -224,17 +216,12 @@
     <div class="item">
       <label>톡 대상 수 <span id="vTok"></span></label>
       <input type="range" id="rTok" min="3" max="8" step="1">
-      <small>한 판에 나오는 "가방을 뒤로 멘 승객 / 길을 막고 선 승객" 수. 시작값 5.</small>
+      <small>한 판에 나오는 "가방을 뒤로 멘 승객 / 길을 막고 선 승객" 수. 시작값 5. (문 앞·승강장 무리 2곳은 늘 있음)</small>
     </div>
     <div class="item">
-      <label>톡톡 구간 길이 <span id="vTokSec"></span></label>
-      <input type="range" id="rTokSec" min="15" max="40" step="1">
-      <small>시작값 25초. 다 풀면 그 전에 문이 열려요.</small>
-    </div>
-    <div class="item">
-      <label>문 열림 구간 길이 <span id="vDoorSec"></span></label>
-      <input type="range" id="rDoorSec" min="10" max="30" step="1">
-      <small>시작값 20초. 이 구간이 끝날 때 성공/실패를 판정해요.</small>
+      <label>정리 시간 <span id="vPlaySec"></span></label>
+      <input type="range" id="rPlaySec" min="25" max="70" step="1">
+      <small>시작 5초 뒤부터 문이 닫힐 때까지의 시간. 시작값 45초. 그 전에 다 정리하면 바로 마무리돼요. 순서는 자유예요.</small>
     </div>
     <button class="btn ghost" id="bReset">시작값으로 되돌리기</button>
     <button class="btn" id="bBack1">돌아가기</button>
@@ -261,8 +248,10 @@
     get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return k in mem ? mem[k] : d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { mem[k] = v; } }
   };
-  const DEFAULTS = { tok: 5, tokSec: 25, doorSec: 20, vib: true };
+  const DEFAULTS = { tok: 5, playSec: 45, vib: true };
+  const BEFORE_FIXED = 5;   // 플레이 전 답답한 정도: 고르는 화면 없이 5로 고정 (재훈 결정, 2026-11-15)
   let cfg = Object.assign({}, DEFAULTS, store.get("cfg", {}));
+  if (!cfg.playSec) cfg.playSec = DEFAULTS.playSec;
   const saveCfg = () => store.set("cfg", cfg);
 
   // ---------- 화면 전환 ----------
@@ -359,14 +348,16 @@
   function startRound() {
     const ents = buildRound();
     G = Object.assign(ents, {
-      t0: performance.now(), phase: "start", parted: false, lined: false,
-      wrongTaps: 0, firstTap: null, ended: false, arrows: [],
-      startSec: 5, tokSec: cfg.tokSec, doorSec: cfg.doorSec, endSec: 10
+      t0: performance.now(), parted: false, lined: false,
+      wrongTaps: 0, firstTap: null, ended: false, arrows: [], order: [],
+      startSec: 5, playSec: cfg.playSec, endSec: 10
     });
-    G.total = G.startSec + G.tokSec + G.doorSec + G.endSec;
+    G.closeAt = G.startSec + G.playSec;
     car.style.setProperty("--calm", 0);
+    car.classList.add("dooropen");          // 문은 처음부터 열려 있음 (재훈 결정)
     $("train").style.transition = "none";
-    setStatus("열차가 역에 들어오고 있어요 · 막힌 곳을 톡!");
+    setStatus("보이는 대로 정리해요 · 막힌 곳은 톡, 무리는 쓱");
+    showArrows();
     show("sGame");
     requestAnimationFrame(tick);
   }
@@ -383,38 +374,27 @@
   function tick() {
     if (!G || G.ended) return;
     const t = elapsed();
-    const doorStart = G.doorStartAt ?? (G.startSec + G.tokSec);
-    // 열차 위치: 판 전체 진행에 맞춰 천천히
-    const prog = Math.min(1, t / (doorStart + G.doorSec));
+    const prog = Math.min(1, t / G.closeAt);          // 열차가 문 닫힘 시각까지 천천히 이동
     const routeW = $("route").clientWidth - 34;
     $("train").style.transform = `translateX(${prog * routeW}px)`;
-
-    if (G.phase === "start" && t >= G.startSec) { G.phase = "tok"; setStatus("정차 중 · 막힌 곳을 톡톡 풀어요"); }
-    if ((G.phase === "start" || G.phase === "tok") &&
-        (t >= G.startSec + G.tokSec || (cleared() === G.blockers.length && t >= 2))) {
-      openDoor(t);
-    }
-    if (G.phase === "door") {
-      const left = G.doorStartAt + G.doorSec - t;
-      if (left <= 5 && !G.warned) { G.warned = true; setStatus("곧 문이 닫힙니다"); }
-      if (left <= 0) judge();
-    }
+    const left = G.closeAt - t;
+    if (left <= 5 && !G.warned) { G.warned = true; setStatus("곧 문이 닫힙니다"); }
+    if (left <= 0) judge();
     requestAnimationFrame(tick);
   }
 
-  function openDoor(t) {
-    G.phase = "door"; G.doorStartAt = t;
-    car.classList.add("dooropen");
-    setStatus("문이 열렸어요 · 문 앞 사람들을 양옆으로 쓱");
-    showArrows("side");
+  function allDone() { return cleared() === G.blockers.length && G.parted && G.lined; }
+  function checkDone() {
+    if (allDone()) { const g = G; setTimeout(() => { if (G === g && !g.ended) judge(); }, 900); }
   }
 
-  function showArrows(kind) {
+  function showArrows() {
     G.arrows.forEach(a => a.remove()); G.arrows = [];
-    const add = (x, y, s, parent) => { const a = document.createElement("div"); a.className = "arrow"; a.textContent = s; a.style.left = x + "%"; a.style.top = y + "%"; (parent || car).appendChild(a); G.arrows.push(a); };
-    if (kind === "side") { add(32, 87, "←"); add(68, 87, "→"); }
-    if (kind === "down") { add(70, 50, "↓", $("platform")); }
+    const add = (key, x, y, s, parent) => { const a = document.createElement("div"); a.className = "arrow"; a.dataset.k = key; a.textContent = s; a.style.left = x + "%"; a.style.top = y + "%"; (parent || car).appendChild(a); G.arrows.push(a); };
+    add("side", 32, 87, "←"); add("side", 68, 87, "→");
+    add("down", 72, 50, "↓", $("platform"));
   }
+  function hideArrows(key) { G.arrows = G.arrows.filter(a => { if (a.dataset.k === key) { a.remove(); return false; } return true; }); }
 
   // ---------- 입력 ----------
   let down = null;
@@ -452,14 +432,12 @@
     best.seg.classList.add("open");
     bubble(best.el, "아!");
     haptic("tap");
+    G.order.push("톡");
     updateCalm();
-    if (G.phase === "door" && G.parted && G.lined && cleared() === G.blockers.length) {
-      const g = G; setTimeout(() => { if (G === g && !g.ended) judge(); }, 900);
-    }
+    checkDone();
   }
 
   function onSwipe(dx, dy) {
-    if (G.phase !== "door") return;
     const horiz = Math.abs(dx) > Math.abs(dy) * 1.2 && Math.abs(dx) > 30;
     const downward = dy > 30 && Math.abs(dy) > Math.abs(dx) * 1.2;
     if (horiz && !G.parted) {
@@ -470,17 +448,18 @@
       // 내리는 사람: 통로에서 문으로 나가기
       const out = [makeP(50, 30, { cls: "slow" }), makeP(50, 20, { cls: "slow" })];
       out.forEach((p, i) => setTimeout(() => { moveP(p, 50, 104); setTimeout(() => { p.style.opacity = 0; }, 900); setTimeout(() => p.remove(), 1800); }, 300 + i * 450));
-      setStatus("길이 났어요 · 타는 사람들을 아래로 쓱 줄 세워요");
-      showArrows("down");
+      hideArrows("side");
+      G.order.push("양옆");
       updateCalm();
-    } else if (downward && G.parted && !G.lined) {
+      checkDone();
+    } else if (downward && !G.lined) {
       G.lined = true;
       G.plat.forEach((p, i) => setTimeout(() => moveP(p, 26 + i * 16, 55), i * 140));
       haptic("soft");
-      G.arrows.forEach(a => a.remove()); G.arrows = [];
-      setStatus("한 줄로 섰어요");
+      hideArrows("down");
+      G.order.push("아래");
       updateCalm();
-      if (cleared() === G.blockers.length) { const g = G; setTimeout(() => { if (G === g && !g.ended) judge(); }, 900); }
+      checkDone();
     }
   }
 
@@ -489,7 +468,7 @@
     if (G.ended) return;
     G.ended = true;
     G.arrows.forEach(a => a.remove());
-    const ok = cleared() === G.blockers.length && G.parted && G.lined;
+    const ok = allDone();
     G.result = ok ? "성공" : "실패";
     G.judgedAt = +elapsed().toFixed(1);
     if (ok) successEnding(); else failEnding();
@@ -540,7 +519,7 @@
       at: new Date().toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
       result: G.result, before: session.before, after, feel,
       wrong: G.wrongTaps, judgedAt: G.judgedAt, retry: session.retry,
-      tok: cfg.tok, tokSec: cfg.tokSec, doorSec: cfg.doorSec, next: action
+      tok: cfg.tok, playSec: cfg.playSec, order: G.order.join(">"), next: action
     });
     store.set("log", log);
   }
@@ -555,17 +534,15 @@
     ends.innerHTML = "<span>0 전혀 안 답답</span><span>10 매우 답답</span>";
     el.appendChild(ends);
   }
-  buildScale($("scaleBefore"), (v) => { session.before = v; setTimeout(startRound, 250); });
   buildScale($("scaleAfter"), (v) => { after = v; });
   document.querySelectorAll("#feel button").forEach(b => b.addEventListener("click", () => {
     document.querySelectorAll("#feel button").forEach(x => x.classList.remove("sel")); b.classList.add("sel"); feel = b.dataset.v;
   }));
 
-  $("bStart").addEventListener("click", () => { session = { before: null, retry: false }; show("sBefore"); });
-  $("skipBefore").addEventListener("click", () => startRound());
+  $("bStart").addEventListener("click", () => { session = { before: BEFORE_FIXED, retry: false }; startRound(); });
   $("bAgain").addEventListener("click", () => {
     saveLog("다시 하기");
-    session = { before: after, retry: G.result === "실패" };
+    session = { before: BEFORE_FIXED, retry: G.result === "실패" };
     startRound();
   });
   $("bStop").addEventListener("click", () => { saveLog("그만하기"); G = null; show("sMenu"); });
@@ -573,11 +550,10 @@
   // ---------- 설정 ----------
   function syncSettings() {
     $("rTok").value = cfg.tok; $("vTok").textContent = cfg.tok + "명";
-    $("rTokSec").value = cfg.tokSec; $("vTokSec").textContent = cfg.tokSec + "초";
-    $("rDoorSec").value = cfg.doorSec; $("vDoorSec").textContent = cfg.doorSec + "초";
+    $("rPlaySec").value = cfg.playSec; $("vPlaySec").textContent = cfg.playSec + "초";
     $("vibState").textContent = cfg.vib ? "켜짐" : "꺼짐";
   }
-  [["rTok", "tok"], ["rTokSec", "tokSec"], ["rDoorSec", "doorSec"]].forEach(([id, k]) =>
+  [["rTok", "tok"], ["rPlaySec", "playSec"]].forEach(([id, k]) =>
     $(id).addEventListener("input", (e) => { cfg[k] = +e.target.value; saveCfg(); syncSettings(); }));
   $("bVib").addEventListener("click", () => { cfg.vib = !cfg.vib; saveCfg(); syncSettings(); });
   $("bVibTest").addEventListener("click", () => haptic("tap"));
