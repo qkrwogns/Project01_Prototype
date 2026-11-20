@@ -546,6 +546,52 @@
     }, i * GAP_MS));
   }
 
+  // ---------- 걷기와 빈 자리 ----------
+  // 세로 %를 가로 % 단위로 바꾸는 비율 (걷는 속도를 화면 어디서나 같게)
+  const CAR_SCALE = 1 / CAR_RATIO;
+  const PLAT_SCALE = () => $("platform").clientHeight / Math.max(1, $("platform").clientWidth);
+  const WALK_SPEED = 38;   // 1초에 칸 너비의 38%
+  function walk(el, pts, yScale, done, ok) {
+    let k = 0;
+    const step = () => {
+      if (ok && !ok()) return;
+      if (k >= pts.length) { if (done) done(); return; }
+      const [x, y] = pts[k++];
+      const d = Math.hypot(x - parseFloat(el.style.left), (y - parseFloat(el.style.top)) * yScale);
+      const ms = Math.max(120, d / WALK_SPEED * 1000);
+      el.style.transition = `left ${ms}ms linear, top ${ms}ms linear, opacity .5s ease, background .5s ease`;
+      void el.offsetWidth;
+      moveP(el, x, y);
+      setTimeout(step, ms);
+    };
+    step();
+  }
+  // 차 안 서 있는 줄(위 36, 아래 64)에서 아무도 없는 자리를 문에서 가까운 순으로 n개 찾음.
+  // 먼 자리부터 돌려줌 → 먼저 탄 사람이 안쪽으로 가서, 뒤에 탄 사람과 길이 겹치지 않음
+  function emptySpots(n) {
+    const near = (a, b) => Math.hypot(a[0] - b[0], (a[1] - b[1]) * CAR_SCALE) < 10;
+    const occ = [...car.querySelectorAll(".p")].filter(e => e.style.opacity !== "0")
+      .map(e => [parseFloat(e.style.left), parseFloat(e.style.top)]);
+    const cand = [];
+    [64, 36].forEach(y => { for (let x = 6; x <= 94; x += 1) cand.push([x, y]); });
+    const dDoor = c => Math.hypot(c[0] - 50, (c[1] - 100) * CAR_SCALE);
+    cand.sort((a, b) => dDoor(a) - dDoor(b));
+    // 서 있는 줄에 빈 자리가 모자라면 문 안쪽 빈 곳
+    const doorArea = [];
+    [74, 92].forEach(y => { for (let x = 42; x <= 58; x += 1) doorArea.push([x, y]); });
+    doorArea.sort((a, b) => dDoor(b) - dDoor(a));
+    const out = [];
+    for (const c of cand.concat(doorArea)) {
+      if (out.length >= n) break;
+      if (occ.some(o => near(o, c)) || out.some(o => near(o, c))) continue;
+      out.push(c);
+    }
+    // 그래도 모자라면(아주 붐빌 때) 가장 덜 붐비는 곳
+    const room = c => Math.min(...occ.concat(out).map(o => Math.hypot(o[0] - c[0], (o[1] - c[1]) * CAR_SCALE)));
+    while (out.length < n) out.push(cand.concat(doorArea).reduce((best, c) => room(c) > room(best) ? c : best));
+    return out.reverse();
+  }
+
   // ---------- 판정과 마무리 ----------
   function judge() {
     if (G.ended) return;
@@ -566,18 +612,27 @@
     setStatus("문이 닫히고 열차가 출발해요");
     const tr = $("train"); tr.style.transition = "transform 7s ease-in-out";
     tr.style.transform = `translateX(${$("route").clientWidth - 34}px)`;
-    // 탑승: 줄 선 사람들이 차례로 차 안으로
+    // 탑승: 줄 선 사람들이 맨 앞사람부터 문 → 통로를 따라 차 안의 빈 서 있는 자리로
+    const spots = emptySpots(g.plat.length);
+    const BOARD_GAP = 600;
     g.plat.forEach((p, i) => setTimeout(() => {
       if (!alive()) return;
-      p.style.opacity = 0;
-      const inCar = makeP(50, 86, { cls: "slow", color: p.style.background });
-      setTimeout(() => moveP(inCar, [44, 56, 44, 56][i % 4], 76 + (i >> 1) * 12), 60);
-    }, W + 400 + i * 500));
-    setTimeout(() => { if (alive()) { car.classList.remove("dooropen"); car.style.setProperty("--calm", 1); } }, W + 2600);
+      const sx = parseFloat(p.style.left) < 50 ? 44 : 56;      // 자기 줄 쪽 문 가장자리
+      walk(p, [[sx, 2]], PLAT_SCALE(), () => {
+        // 승강장 → 차 안으로 넘김 (승강장 맨 위 ≈ 차 문 바로 밖)
+        const w = makeP(sx, 105, { color: p.style.background });
+        p.remove();
+        const [tx, ty] = spots[i];
+        walk(w, [[sx, 50], [tx, 50], [tx, ty]], CAR_SCALE, null, alive);
+      }, alive);
+    }, W + 400 + i * BOARD_GAP));
+    // 문은 마지막 사람이 문을 지난 뒤 닫힘
+    const B = W + 400 + (g.plat.length - 1) * BOARD_GAP;
+    setTimeout(() => { if (alive()) { car.classList.remove("dooropen"); car.style.setProperty("--calm", 1); } }, Math.max(W + 2600, B + 1500));
     const msg = $("msg"); msg.textContent = "모두 제자리를 찾았어요";
     setTimeout(() => { if (alive()) { msg.style.opacity = 1; $("breath").classList.add("on"); } }, 1500);
-    setTimeout(() => { if (alive()) { car.style.transform = "translateY(-6%)"; car.style.opacity = 0; } }, W + 6000);
-    setTimeout(() => { if (alive()) toResult(true); }, W + 10000);   // 마무리 약 10초
+    setTimeout(() => { if (alive()) { car.style.transform = "translateY(-6%)"; car.style.opacity = 0; } }, Math.max(W + 6000, B + 3600));
+    setTimeout(() => { if (alive()) toResult(true); }, Math.max(W + 10000, B + 7600));   // 마무리 약 10초
   }
 
   function failEnding() {
