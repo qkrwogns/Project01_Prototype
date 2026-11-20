@@ -494,17 +494,12 @@
     const downward = dy > 30 && Math.abs(dy) > Math.abs(dx) * 1.2;
     if (horiz && !G.parted) {
       G.parted = true;
-      // 두 사람은 문 양옆 구석으로 비켜서고, 한 사람은 이번 역에서 내림
+      // 두 사람은 문 양옆 구석으로 비켜서고, 한 사람(이번 역에서 내림)은 문 앞에서 기다림
       const pos = [[38, 84], [62, 84]];
-      G.crowd.forEach((p, i) => setTimeout(() => {
-        if (i < 2) moveP(p, pos[i][0], pos[i][1]);
-        else { moveP(p, 50, 106); setTimeout(() => { p.style.opacity = 0; }, 900); }
-      }, i * 120));
+      G.crowd.forEach((p, i) => setTimeout(() => { if (i < 2) moveP(p, pos[i][0], pos[i][1]); }, i * 120));
       haptic("soft");
-      // 내리는 사람: 통로에서 문으로 나가기
-      const out = [makeP(50, 50, { cls: "slow" }), makeP(46, 50, { cls: "slow" })];
-      out.forEach((p, i) => setTimeout(() => { moveP(p, 50, 104); setTimeout(() => { p.style.opacity = 0; }, 900); setTimeout(() => p.remove(), 1800); }, 300 + i * 450));
       hideArrows("side");
+      startExit();
       G.order.push("양옆");
       updateCalm();
       checkDone();
@@ -516,10 +511,39 @@
       G.plat.forEach((p, i) => setTimeout(() => moveP(p, lineSpots[i % 4][0], lineSpots[i % 4][1]), i * 140));
       haptic("soft");
       hideArrows("down");
+      startExit();
       G.order.push("아래");
       updateCalm();
       checkDone();
     }
+  }
+
+  // ---------- 내리는 사람 ----------
+  // 문 앞 길(양옆으로 쓱)과 승강장 두 줄(아래로 쓱)이 모두 정리되면,
+  // 내리는 사람들이 문 → 승강장 두 줄 사이 길 → 승강장 아래로 걸어 나감
+  function startExit() {
+    if (!G.parted || !G.lined || G.exitEnd) return;
+    const g = G;
+    const walkers = [G.crowd[2], makeP(50, 50, { cls: "slow" }), makeP(46, 50, { cls: "slow" })];
+    const CAR_MS = 900, PLAT_MS = 1500, GAP_MS = 550;
+    G.exitEnd = performance.now() + (walkers.length - 1) * GAP_MS + CAR_MS + PLAT_MS + 200;
+    walkers.forEach((p, i) => setTimeout(() => {
+      if (G !== g) return;
+      // 1) 차 안에서 문 밖(승강장 바로 위)까지
+      p.style.transition = `left ${CAR_MS}ms linear, top ${CAR_MS}ms linear, opacity .5s ease`;
+      moveP(p, 50, 106);
+      setTimeout(() => {
+        if (G !== g) return;
+        // 2) 승강장 쪽으로 넘겨서 두 줄 사이로 아래까지 걸어 나감
+        const w = makeP(50, 0, { parent: $("platform"), color: p.style.background });
+        p.remove();
+        w.style.transition = `top ${PLAT_MS}ms linear, opacity .5s ease`;
+        void w.offsetWidth;
+        moveP(w, 50, 125);
+        setTimeout(() => { w.style.opacity = 0; }, PLAT_MS - 500);
+        setTimeout(() => w.remove(), PLAT_MS + 100);
+      }, CAR_MS);
+    }, i * GAP_MS));
   }
 
   // ---------- 판정과 마무리 ----------
@@ -537,6 +561,8 @@
     const g = G;
     const alive = () => G === g;
     haptic("done");
+    // 내리는 사람이 다 나간 뒤에 탑승 시작
+    const W = Math.max(0, (g.exitEnd || 0) - performance.now());
     setStatus("문이 닫히고 열차가 출발해요");
     const tr = $("train"); tr.style.transition = "transform 7s ease-in-out";
     tr.style.transform = `translateX(${$("route").clientWidth - 34}px)`;
@@ -546,12 +572,12 @@
       p.style.opacity = 0;
       const inCar = makeP(50, 86, { cls: "slow", color: p.style.background });
       setTimeout(() => moveP(inCar, [44, 56, 44, 56][i % 4], 76 + (i >> 1) * 12), 60);
-    }, 400 + i * 500));
-    setTimeout(() => { if (alive()) { car.classList.remove("dooropen"); car.style.setProperty("--calm", 1); } }, 2600);
+    }, W + 400 + i * 500));
+    setTimeout(() => { if (alive()) { car.classList.remove("dooropen"); car.style.setProperty("--calm", 1); } }, W + 2600);
     const msg = $("msg"); msg.textContent = "모두 제자리를 찾았어요";
     setTimeout(() => { if (alive()) { msg.style.opacity = 1; $("breath").classList.add("on"); } }, 1500);
-    setTimeout(() => { if (alive()) { car.style.transform = "translateY(-6%)"; car.style.opacity = 0; } }, 6000);
-    setTimeout(() => { if (alive()) toResult(true); }, 10000);   // 마무리 약 10초
+    setTimeout(() => { if (alive()) { car.style.transform = "translateY(-6%)"; car.style.opacity = 0; } }, W + 6000);
+    setTimeout(() => { if (alive()) toResult(true); }, W + 10000);   // 마무리 약 10초
   }
 
   function failEnding() {
