@@ -510,7 +510,10 @@
       checkDone();
     } else if (downward && !G.lined) {
       G.lined = true;
-      G.plat.forEach((p, i) => setTimeout(() => moveP(p, 26 + i * 16, 55), i * 140));
+      // 실제 지하철처럼 문 양옆에 두 줄로 세로 줄서기 (가운데는 내리는 사람 길로 비움)
+      // 순서: 왼쪽 맨 앞 → 오른쪽 맨 앞 → 왼쪽 뒤 → 오른쪽 뒤 (탑승도 이 순서)
+      const lineSpots = [[35, 32], [65, 32], [35, 66], [65, 66]];
+      G.plat.forEach((p, i) => setTimeout(() => moveP(p, lineSpots[i % 4][0], lineSpots[i % 4][1]), i * 140));
       haptic("soft");
       hideArrows("down");
       G.order.push("아래");
